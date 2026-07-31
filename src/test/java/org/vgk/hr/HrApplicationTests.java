@@ -80,4 +80,20 @@ class HrApplicationTests {
         assertEquals(1, columnCount);
     }
 
+    @Test
+    void flywayAddsFieldCodeColumnsToTemplateFields() {
+        Integer columnCount = jdbcTemplate.queryForObject(
+                """
+                        SELECT count(*)
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'template_field'
+                          AND column_name IN ('field_code', 'label', 'value_type', 'value_source')
+                        """,
+                Integer.class
+        );
+
+        assertEquals(4, columnCount);
+    }
+
 }

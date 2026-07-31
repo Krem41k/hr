@@ -2,9 +2,11 @@ package org.vgk.hr.service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.vgk.hr.db.entity.FieldValueSource;
+import org.vgk.hr.db.entity.FieldValueType;
 import org.vgk.hr.db.entity.PdfTemplate;
 import org.vgk.hr.db.entity.TemplateField;
-import org.vgk.hr.db.entity.TemplateFieldType;
+import org.vgk.hr.db.entity.WellKnownFieldCodes;
 import org.vgk.hr.db.repository.PdfTemplateRepository;
 import org.vgk.hr.domain.request.TemplateFieldRequest;
 import org.vgk.hr.domain.request.TemplateUploadRequest;
@@ -43,7 +45,8 @@ class PdfTemplateServiceTest {
         assertEquals("template.pdf", savedTemplate.getOriginalFileName());
         assertEquals(3, savedTemplate.getFields().size());
         assertEquals(3, savedTemplate.getActiveFields().size());
-        assertEquals(TemplateFieldType.CURRENT_DATE, savedTemplate.getFields().getFirst().getType());
+        assertEquals(WellKnownFieldCodes.CURRENT_DATE, savedTemplate.getFields().getFirst().getFieldCode());
+        assertEquals(FieldValueSource.SYSTEM, savedTemplate.getFields().getFirst().getValueSource());
         assertEquals(false, savedTemplate.getFields().getFirst().isBold());
         assertFalse(savedTemplate.getFields().getFirst().isDeleted());
     }
@@ -51,9 +54,7 @@ class PdfTemplateServiceTest {
     @Test
     void updatesExistingTemplateAndSoftDeletesOldFields() throws Exception {
         PdfTemplate existingTemplate = new PdfTemplate();
-        TemplateField oldField = new TemplateField(
-                TemplateFieldType.FULL_NAME, 1, 1, 1, 10, 10, 12, "DEJAVU_SANS", "#000000", false, null
-        );
+        TemplateField oldField = fieldEntity(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER);
         oldField.setTemplate(existingTemplate);
         existingTemplate.setFields(new ArrayList<>(List.of(oldField)));
         MockMultipartFile file = new MockMultipartFile("file", "replacement.pdf", "application/pdf", new byte[]{3});
@@ -67,6 +68,23 @@ class PdfTemplateServiceTest {
         assertTrue(oldField.isDeleted());
         assertEquals(3, existingTemplate.getActiveFields().size());
         assertTrue(existingTemplate.getActiveFields().stream().noneMatch(TemplateField::isDeleted));
+    }
+
+    @Test
+    void allowsTemplateWithSingleFieldCode() throws Exception {
+        TemplateUploadRequest request = new TemplateUploadRequest(
+                1,
+                List.of(field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1))
+        );
+        when(repository.findByTemplateNumber(1)).thenReturn(Optional.empty());
+        when(repository.save(any(PdfTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.saveTemplate(validFile(), request);
+
+        var templateCaptor = org.mockito.ArgumentCaptor.forClass(PdfTemplate.class);
+        verify(repository).save(templateCaptor.capture());
+        assertEquals(1, templateCaptor.getValue().getActiveFields().size());
+        assertEquals(WellKnownFieldCodes.FULL_NAME, templateCaptor.getValue().getActiveFields().getFirst().getFieldCode());
     }
 
     @Test
@@ -93,9 +111,7 @@ class PdfTemplateServiceTest {
 
     @Test
     void rejectsNonPositiveTemplateNumber() {
-        MockMultipartFile file = validFile();
-
-        assertThrows(IllegalArgumentException.class, () -> service.saveTemplate(file, validRequest(0)));
+        assertThrows(IllegalArgumentException.class, () -> service.saveTemplate(validFile(), validRequest(0)));
     }
 
     @Test
@@ -106,34 +122,11 @@ class PdfTemplateServiceTest {
     }
 
     @Test
-    void rejectsFieldWithoutTypeOrPage() {
+    void rejectsFieldWithoutCodeOrPage() {
         TemplateFieldRequest invalidField = new TemplateFieldRequest(
-                null, 0, 0, 0, 10, 10, 12, "DEJAVU_SANS", "#000000", false, null
+                null, null, null, null, 0, 0, 0, 10, 10, 12, "DEJAVU_SANS", "#000000", false, null
         );
         TemplateUploadRequest request = new TemplateUploadRequest(1, List.of(invalidField));
-
-        assertThrows(IllegalArgumentException.class, () -> service.saveTemplate(validFile(), request));
-    }
-
-    @Test
-    void rejectsRequestWithoutRequiredFieldTypes() {
-        TemplateUploadRequest request = new TemplateUploadRequest(
-                1,
-                List.of(field(TemplateFieldType.FULL_NAME, 1))
-        );
-
-        assertThrows(IllegalArgumentException.class, () -> service.saveTemplate(validFile(), request));
-    }
-
-    @Test
-    void rejectsRequestWithoutBirthDateField() {
-        TemplateUploadRequest request = new TemplateUploadRequest(
-                1,
-                List.of(
-                        field(TemplateFieldType.CURRENT_DATE, 1),
-                        field(TemplateFieldType.FULL_NAME, 1)
-                )
-        );
 
         assertThrows(IllegalArgumentException.class, () -> service.saveTemplate(validFile(), request));
     }
@@ -142,16 +135,24 @@ class PdfTemplateServiceTest {
         return new TemplateUploadRequest(
                 templateNumber,
                 List.of(
-                        field(TemplateFieldType.CURRENT_DATE, 1),
-                        field(TemplateFieldType.BIRTH_DATE, 1),
-                        field(TemplateFieldType.FULL_NAME, 1)
+                        field(WellKnownFieldCodes.CURRENT_DATE, "Текущая дата", FieldValueType.DATE, FieldValueSource.SYSTEM, 1),
+                        field(WellKnownFieldCodes.BIRTH_DATE, "Дата рождения", FieldValueType.DATE, FieldValueSource.USER, 1),
+                        field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1)
                 )
         );
     }
 
-    private TemplateFieldRequest field(TemplateFieldType type, int pageNumber) {
+    private TemplateFieldRequest field(String fieldCode, String label, FieldValueType valueType,
+                                       FieldValueSource valueSource, int pageNumber) {
         return new TemplateFieldRequest(
-                type, pageNumber, 10, 20, 100, 20, 12, "DEJAVU_SANS", "#000000", false, "dd.MM.yyyy"
+                fieldCode, label, valueType, valueSource, pageNumber, 10, 20, 100, 20, 12,
+                "DEJAVU_SANS", "#000000", false, "dd.MM.yyyy"
+        );
+    }
+
+    private TemplateField fieldEntity(String fieldCode, String label, FieldValueType valueType, FieldValueSource valueSource) {
+        return new TemplateField(
+                fieldCode, label, valueType, valueSource, 1, 1, 1, 10, 10, 12, "DEJAVU_SANS", "#000000", false, null
         );
     }
 

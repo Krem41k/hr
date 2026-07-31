@@ -1,12 +1,19 @@
 package org.vgk.hr.domain.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import org.vgk.hr.db.entity.TemplateFieldType;
+import org.vgk.hr.db.entity.FieldValueSource;
+import org.vgk.hr.db.entity.FieldValueType;
 
 @Schema(description = "Позиция и оформление текста в PDF")
 public record TemplateFieldRequest(
-        @Schema(description = "Значение для подстановки", example = "FULL_NAME")
-        TemplateFieldType type,
+        @Schema(description = "Стабильный код поля для склейки и подстановки", example = "fullName")
+        String fieldCode,
+        @Schema(description = "Подпись поля для UI", example = "ФИО")
+        String label,
+        @Schema(description = "Тип значения", example = "TEXT")
+        FieldValueType valueType,
+        @Schema(description = "Источник значения", example = "USER")
+        FieldValueSource valueSource,
         @Schema(description = "Номер страницы PDF, начиная с 1", example = "1")
         int pageNumber,
         @Schema(description = "Координата левого нижнего угла по оси X", example = "150")
@@ -25,10 +32,7 @@ public record TemplateFieldRequest(
         String color,
         @Schema(description = "Жирное начертание шрифта", example = "false")
         Boolean bold,
-        @Schema(
-                description = "Шаблон даты для CURRENT_DATE и BIRTH_DATE",
-                example = "dd.MM.yyyy"
-        )
+        @Schema(description = "Шаблон даты для DATE-полей", example = "dd.MM.yyyy")
         String dateFormat
 ) {
 }

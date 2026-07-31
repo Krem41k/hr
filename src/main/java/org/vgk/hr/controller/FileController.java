@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.vgk.hr.db.entity.PdfTemplate;
 import org.vgk.hr.db.entity.TemplateField;
-import org.vgk.hr.db.entity.TemplateFieldType;
+import org.vgk.hr.db.entity.WellKnownFieldCodes;
 import org.vgk.hr.domain.request.TextEditRequest;
 import org.vgk.hr.domain.request.TemplateUploadRequest;
 import org.vgk.hr.service.PdfEditorService;
@@ -46,7 +46,7 @@ public class FileController {
 
     @Operation(
             summary = "Сохранить или обновить PDF-шаблон",
-            description = "Сохраняет PDF в базе данных вместе со списком всех координат полей даты, даты рождения и ФИО."
+            description = "Сохраняет PDF и список полей с fieldCode и координатами. При обновлении старые поля помечаются deleted."
     )
     @ApiResponse(responseCode = "201", description = "Шаблон сохранён")
     @PostMapping(value = "/templates", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -78,7 +78,7 @@ public class FileController {
 
     @Operation(
             summary = "Сгенерировать PDF",
-            description = "Находит шаблон по номеру, подставляет текущую дату, дату рождения и ФИО."
+            description = "Подставляет значения по fieldCode активных полей. Поддерживаются fullName, birthDate, currentDate."
     )
     @ApiResponse(
             responseCode = "200",
@@ -126,10 +126,14 @@ public class FileController {
     }
 
     private String valueFor(TemplateField field, String fullName, LocalDate birthDate) {
-        return switch (field.getType()) {
-            case FULL_NAME -> fullName;
-            case BIRTH_DATE -> formatDate(birthDate, field.getDateFormat());
-            case CURRENT_DATE -> formatDate(LocalDate.now(), field.getDateFormat());
+        String code = WellKnownFieldCodes.normalize(field.getFieldCode());
+        return switch (code) {
+            case WellKnownFieldCodes.FULL_NAME -> fullName;
+            case WellKnownFieldCodes.BIRTH_DATE -> formatDate(birthDate, field.getDateFormat());
+            case WellKnownFieldCodes.CURRENT_DATE -> formatDate(LocalDate.now(), field.getDateFormat());
+            default -> throw new IllegalArgumentException(
+                    "Unsupported fieldCode for generate API: " + field.getFieldCode()
+            );
         };
     }
 

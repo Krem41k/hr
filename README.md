@@ -114,7 +114,12 @@ Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagge
 - springdoc-openapi (Swagger)
 - Testcontainers, JUnit 5, JaCoCo (порог покрытия ≥ 80%)
 
-## Локальный запуск
+## CI
+
+На каждый pull request и push в `main`/`master` GitHub Actions запускает `./mvnw clean verify` (включая Testcontainers и проверку покрытия JaCoCo ≥ 80%).
+
+Чтобы запретить merge без зелёных тестов: **Settings → Branches → Branch protection rules** для `master` → включить **Require status checks to pass** и выбрать check `Maven verify`.
+
 
 1. Поднять PostgreSQL:
 

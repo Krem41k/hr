@@ -29,4 +29,6 @@ jobs:
           cache: maven
 
       - name: Run tests and coverage check
-        run: ./mvnw -B clean verify
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B clean verify

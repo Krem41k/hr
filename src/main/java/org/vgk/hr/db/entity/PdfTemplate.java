@@ -2,15 +2,19 @@ package org.vgk.hr.db.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.vgk.hr.position.Position;
 
 import java.sql.Types;
 import java.util.ArrayList;
@@ -34,6 +38,22 @@ public class PdfTemplate {
     /** Уникальный номер шаблона, который передаёт клиент при генерации PDF. */
     @Column(nullable = false, unique = true)
     private Integer templateNumber;
+
+    /** Должность, к которой относится шаблон; null для legacy-шаблонов. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "position_id")
+    private Position position;
+
+    /** Отображаемое имя шаблона в пакете документов. */
+    private String name;
+
+    /** Порядок шаблона внутри должности. */
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder;
+
+    /** Признак мягкого удаления шаблона в пакете должности. */
+    @Column(nullable = false)
+    private boolean deleted;
 
     /** Исходное имя загруженного PDF-файла. */
     @Column(nullable = false)

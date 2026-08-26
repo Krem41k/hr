@@ -13,7 +13,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("HR API")
-                        .description("API для генерации PDF-документов")
+                        .description("API должностей, PDF-шаблонов, писем и генерации документов")
                         .version("v1"));
     }
 }

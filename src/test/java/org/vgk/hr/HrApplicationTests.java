@@ -40,12 +40,28 @@ class HrApplicationTests {
                         SELECT count(*)
                         FROM information_schema.tables
                         WHERE table_schema = 'public'
-                          AND table_name IN ('pdf_templates', 'template_field')
+                          AND table_name IN ('pdf_templates', 'template_field', 'positions', 'email_templates')
                         """,
                 Integer.class
         );
 
-        assertEquals(2, tableCount);
+        assertEquals(4, tableCount);
+    }
+
+    @Test
+    void flywayAddsPositionColumnsToPdfTemplates() {
+        Integer columnCount = jdbcTemplate.queryForObject(
+                """
+                        SELECT count(*)
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'pdf_templates'
+                          AND column_name IN ('position_id', 'name', 'sort_order', 'deleted')
+                        """,
+                Integer.class
+        );
+
+        assertEquals(4, columnCount);
     }
 
     @Test

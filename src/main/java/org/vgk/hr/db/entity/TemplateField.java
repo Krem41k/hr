@@ -1,5 +1,6 @@
 package org.vgk.hr.db.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -34,9 +35,23 @@ public class TemplateField {
     @JoinColumn(name = "template_id", nullable = false)
     private PdfTemplate template;
 
-    /** Тип подставляемого значения: текущая дата или ФИО. */
+    /** Стабильный код поля для склейки формы и подстановки (например fullName). */
+    @Column(name = "field_code", nullable = false, length = 64)
+    private String fieldCode;
+
+    /** Подпись поля для UI. */
+    private String label;
+
+    /** Тип значения: текст или дата. */
     @Enumerated(EnumType.STRING)
-    private TemplateFieldType type;
+    @Column(name = "value_type", nullable = false, length = 32)
+    private FieldValueType valueType;
+
+    /** Источник значения: пользователь или система. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "value_source", nullable = false, length = 32)
+    private FieldValueSource valueSource;
+
     /** Номер страницы PDF, начиная с 1. */
     private int pageNumber;
     /** Координата левого нижнего угла области по оси X. */
@@ -55,14 +70,18 @@ public class TemplateField {
     private String color;
     /** Нужно ли использовать жирное начертание шрифта. */
     private boolean bold;
-    /** Формат даты для CURRENT_DATE и BIRTH_DATE; не используется для FULL_NAME. */
+    /** Формат даты для DATE-полей; не используется для TEXT. */
     private String dateFormat;
     /** Признак мягкого удаления: старые настройки помечаются при обновлении шаблона. */
     private boolean deleted;
 
-    public TemplateField(TemplateFieldType type, int pageNumber, double x, double y, double width, double height,
+    public TemplateField(String fieldCode, String label, FieldValueType valueType, FieldValueSource valueSource,
+                         int pageNumber, double x, double y, double width, double height,
                          double fontSize, String fontName, String color, boolean bold, String dateFormat) {
-        this.type = type;
+        this.fieldCode = fieldCode;
+        this.label = label;
+        this.valueType = valueType;
+        this.valueSource = valueSource;
         this.pageNumber = pageNumber;
         this.x = x;
         this.y = y;

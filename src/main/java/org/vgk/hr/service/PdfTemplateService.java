@@ -4,15 +4,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.vgk.hr.db.entity.FieldValueSource;
+import org.vgk.hr.db.entity.FieldValueType;
 import org.vgk.hr.db.entity.PdfTemplate;
 import org.vgk.hr.db.entity.TemplateField;
-import org.vgk.hr.db.entity.TemplateFieldType;
+import org.vgk.hr.db.entity.WellKnownFieldCodes;
 import org.vgk.hr.db.repository.PdfTemplateRepository;
 import org.vgk.hr.domain.request.TemplateFieldRequest;
 import org.vgk.hr.domain.request.TemplateUploadRequest;
 
 import java.io.IOException;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -51,19 +52,28 @@ public class PdfTemplateService {
         if (request.fields() == null || request.fields().isEmpty()) {
             throw new IllegalArgumentException("At least one template field is required");
         }
-        if (request.fields().stream().anyMatch(field -> field.type() == null || field.pageNumber() < 1)) {
-            throw new IllegalArgumentException("Every field must have a type and a positive page number");
-        }
-        if (countFields(request.fields(), TemplateFieldType.CURRENT_DATE) == 0
-                || countFields(request.fields(), TemplateFieldType.BIRTH_DATE) == 0
-                || countFields(request.fields(), TemplateFieldType.FULL_NAME) == 0) {
-            throw new IllegalArgumentException("Date, birth date and full name fields are required");
+        if (request.fields().stream().anyMatch(field ->
+                field.fieldCode() == null || field.fieldCode().isBlank() || field.pageNumber() < 1)) {
+            throw new IllegalArgumentException("Every field must have a fieldCode and a positive page number");
         }
     }
 
     private TemplateField toTemplateField(TemplateFieldRequest request) {
+        String fieldCode = WellKnownFieldCodes.normalize(request.fieldCode());
+        FieldValueType valueType = request.valueType() != null
+                ? request.valueType()
+                : defaultValueType(fieldCode);
+        FieldValueSource valueSource = request.valueSource() != null
+                ? request.valueSource()
+                : defaultValueSource(fieldCode);
+        String label = request.label() == null || request.label().isBlank()
+                ? fieldCode
+                : request.label();
         return new TemplateField(
-                request.type(),
+                fieldCode,
+                label,
+                valueType,
+                valueSource,
                 request.pageNumber(),
                 request.x(),
                 request.y(),
@@ -77,9 +87,18 @@ public class PdfTemplateService {
         );
     }
 
-    private long countFields(List<TemplateFieldRequest> fields, TemplateFieldType type) {
-        return fields.stream()
-                .filter(field -> field.type() == type)
-                .count();
+    private FieldValueType defaultValueType(String fieldCode) {
+        if (WellKnownFieldCodes.BIRTH_DATE.equals(fieldCode)
+                || WellKnownFieldCodes.CURRENT_DATE.equals(fieldCode)) {
+            return FieldValueType.DATE;
+        }
+        return FieldValueType.TEXT;
+    }
+
+    private FieldValueSource defaultValueSource(String fieldCode) {
+        if (WellKnownFieldCodes.CURRENT_DATE.equals(fieldCode)) {
+            return FieldValueSource.SYSTEM;
+        }
+        return FieldValueSource.USER;
     }
 }

@@ -4,9 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.vgk.hr.db.entity.FieldValueSource;
+import org.vgk.hr.db.entity.FieldValueType;
 import org.vgk.hr.db.entity.PdfTemplate;
 import org.vgk.hr.db.entity.TemplateField;
-import org.vgk.hr.db.entity.TemplateFieldType;
+import org.vgk.hr.db.entity.WellKnownFieldCodes;
 import org.vgk.hr.domain.request.TemplateUploadRequest;
 import org.vgk.hr.service.PdfEditorService;
 import org.vgk.hr.service.PdfTemplateService;
@@ -41,9 +43,9 @@ class FileControllerTest {
                 {
                   "templateNumber": 1,
                   "fields": [
-                    {"type":"CURRENT_DATE","pageNumber":1,"x":10,"y":10,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":false,"dateFormat":"dd.MM.yyyy"},
-                    {"type":"BIRTH_DATE","pageNumber":1,"x":10,"y":30,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":false,"dateFormat":"dd.MM.yyyy"},
-                    {"type":"FULL_NAME","pageNumber":1,"x":10,"y":20,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":true,"dateFormat":null}
+                    {"fieldCode":"currentDate","label":"Текущая дата","valueType":"DATE","valueSource":"SYSTEM","pageNumber":1,"x":10,"y":10,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":false,"dateFormat":"dd.MM.yyyy"},
+                    {"fieldCode":"birthDate","label":"Дата рождения","valueType":"DATE","valueSource":"USER","pageNumber":1,"x":10,"y":30,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":false,"dateFormat":"dd.MM.yyyy"},
+                    {"fieldCode":"fullName","label":"ФИО","valueType":"TEXT","valueSource":"USER","pageNumber":1,"x":10,"y":20,"width":10,"height":10,"fontSize":12,"fontName":"DEJAVU_SANS","color":"#000000","bold":true,"dateFormat":null}
                   ]
                 }
                 """.getBytes();
@@ -55,14 +57,15 @@ class FileControllerTest {
         verify(pdfTemplateService).saveTemplate(org.mockito.ArgumentMatchers.same(file), requestCaptor.capture());
         assertEquals(1, requestCaptor.getValue().templateNumber());
         assertEquals(3, requestCaptor.getValue().fields().size());
+        assertEquals(WellKnownFieldCodes.FULL_NAME, requestCaptor.getValue().fields().get(2).fieldCode());
     }
 
     @Test
     void generatesPdfWithAllTemplateFields() throws Exception {
         PdfTemplate template = templateWithFields(
-                new TemplateField(TemplateFieldType.FULL_NAME, 1, 10, 20, 200, 20, 12, "DEJAVU_SANS", "#000000", true, null),
-                new TemplateField(TemplateFieldType.CURRENT_DATE, 2, 30, 40, 200, 20, 12, "DEJAVU_SANS", "#000000", false, "dd.MM.yyyy"),
-                new TemplateField(TemplateFieldType.BIRTH_DATE, 1, 50, 60, 200, 20, 12, "DEJAVU_SANS", "#000000", false, "dd.MM.yyyy")
+                field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1, 10, 20, true, null),
+                field(WellKnownFieldCodes.CURRENT_DATE, "Дата", FieldValueType.DATE, FieldValueSource.SYSTEM, 2, 30, 40, false, "dd.MM.yyyy"),
+                field(WellKnownFieldCodes.BIRTH_DATE, "ДР", FieldValueType.DATE, FieldValueSource.USER, 1, 50, 60, false, "dd.MM.yyyy")
         );
         byte[] generatedPdf = {4, 5, 6};
         LocalDate birthDate = LocalDate.of(1990, 5, 15);
@@ -94,9 +97,9 @@ class FileControllerTest {
     @Test
     void usesIsoDateWhenTemplateFieldHasNoFormat() throws Exception {
         PdfTemplate template = templateWithFields(
-                new TemplateField(TemplateFieldType.CURRENT_DATE, 1, 10, 20, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null),
-                new TemplateField(TemplateFieldType.BIRTH_DATE, 1, 10, 35, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null),
-                new TemplateField(TemplateFieldType.FULL_NAME, 1, 10, 50, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null)
+                field(WellKnownFieldCodes.CURRENT_DATE, "Дата", FieldValueType.DATE, FieldValueSource.SYSTEM, 1, 10, 20, false, null),
+                field(WellKnownFieldCodes.BIRTH_DATE, "ДР", FieldValueType.DATE, FieldValueSource.USER, 1, 10, 35, false, null),
+                field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1, 10, 50, false, null)
         );
         LocalDate birthDate = LocalDate.of(1990, 5, 15);
         when(pdfTemplateService.getTemplate(2)).thenReturn(template);
@@ -116,16 +119,12 @@ class FileControllerTest {
 
     @Test
     void ignoresDeletedFieldsWhenGeneratingPdf() throws Exception {
-        TemplateField activeName = new TemplateField(
-                TemplateFieldType.FULL_NAME, 1, 10, 50, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null
-        );
-        TemplateField deletedName = new TemplateField(
-                TemplateFieldType.FULL_NAME, 1, 10, 70, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null
-        );
+        TemplateField activeName = field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1, 10, 50, false, null);
+        TemplateField deletedName = field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER, 1, 10, 70, false, null);
         deletedName.setDeleted(true);
         PdfTemplate template = templateWithFields(
-                new TemplateField(TemplateFieldType.CURRENT_DATE, 1, 10, 20, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null),
-                new TemplateField(TemplateFieldType.BIRTH_DATE, 1, 10, 35, 200, 20, 12, "DEJAVU_SANS", "#000000", false, null),
+                field(WellKnownFieldCodes.CURRENT_DATE, "Дата", FieldValueType.DATE, FieldValueSource.SYSTEM, 1, 10, 20, false, null),
+                field(WellKnownFieldCodes.BIRTH_DATE, "ДР", FieldValueType.DATE, FieldValueSource.USER, 1, 10, 35, false, null),
                 activeName,
                 deletedName
         );
@@ -137,6 +136,13 @@ class FileControllerTest {
         var editsCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
         verify(pdfEditorService).editPdf(org.mockito.ArgumentMatchers.same(template.getContent()), editsCaptor.capture());
         assertEquals(3, editsCaptor.getValue().size());
+    }
+
+    private TemplateField field(String fieldCode, String label, FieldValueType valueType, FieldValueSource valueSource,
+                                int page, double x, double y, boolean bold, String dateFormat) {
+        return new TemplateField(
+                fieldCode, label, valueType, valueSource, page, x, y, 200, 20, 12, "DEJAVU_SANS", "#000000", bold, dateFormat
+        );
     }
 
     private PdfTemplate templateWithFields(TemplateField... fields) {

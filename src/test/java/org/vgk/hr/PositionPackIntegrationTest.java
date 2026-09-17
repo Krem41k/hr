@@ -1,5 +1,8 @@
 package org.vgk.hr;
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +22,10 @@ import org.vgk.hr.domain.request.TemplateFieldRequest;
 import org.vgk.hr.emailtemplate.EmailTemplateRequest;
 import org.vgk.hr.emailtemplate.EmailTemplateResponse;
 import org.vgk.hr.emailtemplate.EmailTemplateService;
+import org.vgk.hr.generation.DocumentPackService;
+import org.vgk.hr.generation.GenerateDocumentPackRequest;
+import org.vgk.hr.generation.GeneratedDocumentPack;
+import org.vgk.hr.generation.MissingFieldValuesException;
 import org.vgk.hr.position.FormSchemaResponse;
 import org.vgk.hr.position.PositionRequest;
 import org.vgk.hr.position.PositionResponse;
@@ -28,7 +35,13 @@ import org.vgk.hr.template.DocumentTemplateService;
 import org.vgk.hr.template.DocumentTemplateUploadRequest;
 import org.vgk.hr.template.FieldCodeConflictException;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -47,6 +60,8 @@ class PositionPackIntegrationTest {
     private DocumentTemplateService documentTemplateService;
     @Autowired
     private EmailTemplateService emailTemplateService;
+    @Autowired
+    private DocumentPackService documentPackService;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -140,8 +155,85 @@ class PositionPackIntegrationTest {
         ));
     }
 
+    @Test
+    @Transactional
+    void generatesZipPackWithRenderedEmailForTwoPdfs() throws Exception {
+        PositionResponse position = positionService.create(new PositionRequest("Механик", "mechanic", true));
+        documentTemplateService.create(
+                position.id(),
+                realPdf("Направление.pdf"),
+                new DocumentTemplateUploadRequest("Направление", 0, List.of(
+                        field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER),
+                        field(WellKnownFieldCodes.CURRENT_DATE, "Дата", FieldValueType.DATE, FieldValueSource.SYSTEM)
+                ))
+        );
+        documentTemplateService.create(
+                position.id(),
+                realPdf("Согласие.pdf"),
+                new DocumentTemplateUploadRequest("Согласие", 1, List.of(
+                        field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER),
+                        field(WellKnownFieldCodes.BIRTH_DATE, "Дата рождения", FieldValueType.DATE, FieldValueSource.USER)
+                ))
+        );
+        emailTemplateService.upsert(
+                position.id(),
+                new EmailTemplateRequest("Документы {{fullName}}", "ДР {{birthDate}}")
+        );
+
+        GeneratedDocumentPack pack = documentPackService.generate(
+                position.id(),
+                new GenerateDocumentPackRequest(Map.of(
+                        WellKnownFieldCodes.FULL_NAME, "Иванов Иван Иванович",
+                        WellKnownFieldCodes.BIRTH_DATE, "1990-05-15"
+                ))
+        );
+
+        List<String> entryNames = new ArrayList<>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(pack.zip()))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                entryNames.add(entry.getName());
+                try (PDDocument document = Loader.loadPDF(zip.readAllBytes())) {
+                    assertEquals(1, document.getNumberOfPages());
+                }
+            }
+        }
+
+        assertEquals(List.of("01-Направление.pdf", "02-Согласие.pdf"), entryNames);
+        assertEquals("Документы Иванов Иван Иванович", pack.emailSubject());
+        assertEquals("ДР 15.05.1990", pack.emailBody());
+        assertEquals("mechanic-documents.zip", pack.fileName());
+    }
+
+    @Test
+    @Transactional
+    void rejectsGenerationWithoutRequiredFieldValues() throws Exception {
+        PositionResponse position = positionService.create(new PositionRequest("Грузчик", "loader", true));
+        documentTemplateService.create(
+                position.id(),
+                realPdf("Направление.pdf"),
+                new DocumentTemplateUploadRequest("Направление", 0, List.of(
+                        field(WellKnownFieldCodes.FULL_NAME, "ФИО", FieldValueType.TEXT, FieldValueSource.USER)
+                ))
+        );
+
+        assertThrows(MissingFieldValuesException.class, () -> documentPackService.generate(
+                position.id(),
+                new GenerateDocumentPackRequest(Map.of())
+        ));
+    }
+
     private MockMultipartFile pdf(String name) {
         return new MockMultipartFile("file", name, MediaType.APPLICATION_PDF_VALUE, new byte[]{1, 2, 3});
+    }
+
+    private MockMultipartFile realPdf(String name) throws Exception {
+        try (PDDocument document = new PDDocument()) {
+            document.addPage(new PDPage());
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            document.save(output);
+            return new MockMultipartFile("file", name, MediaType.APPLICATION_PDF_VALUE, output.toByteArray());
+        }
     }
 
     private TemplateFieldRequest field(String code, String label, FieldValueType type, FieldValueSource source) {

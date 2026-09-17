@@ -25,6 +25,7 @@ import org.vgk.hr.domain.request.TextEditRequest;
 import org.vgk.hr.domain.request.TemplateUploadRequest;
 import org.vgk.hr.service.PdfEditorService;
 import org.vgk.hr.service.PdfTemplateService;
+import org.vgk.hr.shared.TextEditFactory;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -36,7 +37,7 @@ import java.util.Locale;
 @RequestMapping("/api/v1/file")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "File", description = "Генерация PDF-документов")
+@Tag(name = "File (legacy)", description = "Устаревший API одиночного шаблона; используйте /api/v1/positions")
 public class FileController {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -45,10 +46,12 @@ public class FileController {
     private final PdfTemplateService pdfTemplateService;
 
     @Operation(
-            summary = "Сохранить или обновить PDF-шаблон",
-            description = "Сохраняет PDF и список полей с fieldCode и координатами. При обновлении старые поля помечаются deleted."
+            summary = "Сохранить или обновить PDF-шаблон (устарело)",
+            description = "Используйте POST /api/v1/positions/{positionId}/templates.",
+            deprecated = true
     )
     @ApiResponse(responseCode = "201", description = "Шаблон сохранён")
+    @Deprecated(forRemoval = true)
     @PostMapping(value = "/templates", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> uploadTemplate(
             @Parameter(description = "PDF-шаблон", required = true)
@@ -77,8 +80,9 @@ public class FileController {
     }
 
     @Operation(
-            summary = "Сгенерировать PDF",
-            description = "Подставляет значения по fieldCode активных полей. Поддерживаются fullName, birthDate, currentDate."
+            summary = "Сгенерировать PDF (устарело)",
+            description = "Используйте POST /api/v1/positions/{positionId}/generate — он возвращает ZIP и текст письма.",
+            deprecated = true
     )
     @ApiResponse(
             responseCode = "200",
@@ -86,6 +90,7 @@ public class FileController {
             content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE)
     )
     @ApiResponse(responseCode = "500", description = "Ошибка генерации PDF")
+    @Deprecated(forRemoval = true)
     @PostMapping("/generate")
     public ResponseEntity<byte[]> generateInvoice(
             @Parameter(description = "Номер сохранённого шаблона", example = "1", required = true)
@@ -121,7 +126,7 @@ public class FileController {
 
     private List<TextEditRequest> buildEdits(PdfTemplate template, String fullName, LocalDate birthDate) {
         return template.getActiveFields().stream()
-                .map(field -> createEdit(field, valueFor(field, fullName, birthDate)))
+                .map(field -> TextEditFactory.from(field, valueFor(field, fullName, birthDate)))
                 .toList();
     }
 
@@ -142,21 +147,5 @@ public class FileController {
                 ? DateTimeFormatter.ISO_LOCAL_DATE
                 : DateTimeFormatter.ofPattern(dateFormat, Locale.forLanguageTag("ru"));
         return date.format(formatter);
-    }
-
-    private TextEditRequest createEdit(TemplateField field, String text) {
-        return TextEditRequest.builder()
-                .pageNumber(field.getPageNumber())
-                .x(field.getX())
-                .y(field.getY())
-                .width(field.getWidth())
-                .height(field.getHeight())
-                .text(text)
-                .fontSize(field.getFontSize())
-                .fontName(field.getFontName())
-                .bold(field.isBold())
-                .color(field.getColor())
-                .overwrite(true)
-                .build();
     }
 }

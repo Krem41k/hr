@@ -73,38 +73,48 @@ hr/
 
 ## API
 
-Базовый путь: `/api/v1/file`  
+Базовый путь: `/api/v1/positions`  
 Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 
-### Загрузить или обновить шаблон
+### Настройка должности (админка)
 
-`POST /api/v1/file/templates` — `multipart/form-data`
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `POST` / `GET` | `/api/v1/positions` | создать должность / список должностей |
+| `GET` / `PUT` / `DELETE` | `/api/v1/positions/{id}` | карточка, изменение, деактивация |
+| `GET` / `POST` | `/api/v1/positions/{id}/templates` | список PDF-шаблонов / загрузка (`multipart`: `file` + `metadata`) |
+| `PUT` / `DELETE` | `/api/v1/positions/{id}/templates/{templateId}` | замена файла и полей / мягкое удаление |
+| `GET` / `PUT` | `/api/v1/positions/{id}/email-template` | шаблон письма с плейсхолдерами `{{fieldCode}}` |
 
-| Часть | Описание |
-|-------|----------|
-| `file` | PDF-файл шаблона |
-| `metadata` | JSON с номером шаблона и списком полей |
+Поле в `metadata.fields` описывается своим `fieldCode` (например `fullName`), `label`, `valueType` (`TEXT` / `DATE`), `valueSource` (`USER` / `SYSTEM`), координатами (`pageNumber`, `x`, `y`, `width`, `height`), оформлением (`fontSize`, `fontName`, `color`, `bold`) и `dateFormat` для дат. Один и тот же `fieldCode` в разных шаблонах должности обязан иметь одинаковые `label`, `valueType` и `valueSource` — иначе сохранение вернёт `400`.
 
-Типы полей в `metadata.fields`:
+### Форма оператора
 
-- `CURRENT_DATE` — текущая дата (`dateFormat`, например `dd.MM.yyyy`)
-- `BIRTH_DATE` — дата рождения (`dateFormat`)
-- `FULL_NAME` — ФИО
-- `bold` — жирное начертание (`true` / `false`)
+`GET /api/v1/positions/{id}/form-schema` — уникальные `USER`-поля всех активных шаблонов должности: то, что должен заполнить оператор. `SYSTEM`-поля (например `currentDate`) в схему не попадают и подставляются сервером.
 
-В шаблоне должны быть хотя бы по одному полю каждого обязательного типа: `CURRENT_DATE`, `BIRTH_DATE`, `FULL_NAME`.
+### Сгенерировать пакет документов
 
-### Сгенерировать PDF
+`POST /api/v1/positions/{id}/generate`
 
-`POST /api/v1/file/generate`
+```json
+{ "fields": { "fullName": "Иванов Иван Иванович", "birthDate": "1990-05-15" } }
+```
 
-| Параметр | Описание |
-|----------|----------|
-| `templateNumber` | Номер сохранённого шаблона |
-| `fullName` | ФИО сотрудника |
-| `birthDate` | Дата рождения в формате `yyyy-MM-dd` |
+Ответ — `application/zip` со всеми заполненными PDF (`01-Направление.pdf`, `02-Согласие.pdf`, …). Текст письма приходит в заголовках:
 
-Ответ: файл `application/pdf`.
+| Заголовок | Значение |
+|-----------|----------|
+| `X-Email-Subject` | тема письма, Base64 от UTF-8 |
+| `X-Email-Body` | тело письма, Base64 от UTF-8 |
+| `X-Email-Encoding` | всегда `base64` |
+
+Base64 нужен потому, что HTTP-заголовки не переносят кириллицу как есть. В браузере: `new TextDecoder().decode(Uint8Array.from(atob(header), c => c.charCodeAt(0)))`.
+
+Коды ошибок: `400` — не переданы или некорректны значения полей (`DATE` ожидает `yyyy-MM-dd`), `404` — должность не найдена, `409` — должность неактивна или без активных шаблонов.
+
+### Legacy API
+
+`POST /api/v1/file/templates` и `POST /api/v1/file/generate` работают на одиночном шаблоне без должности. Помечены `@Deprecated`, будут удалены — используйте `/api/v1/positions`.
 
 ## Технологии
 

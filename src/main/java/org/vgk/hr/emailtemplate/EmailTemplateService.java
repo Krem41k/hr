@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vgk.hr.position.Position;
 import org.vgk.hr.position.PositionService;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class EmailTemplateService {
@@ -18,6 +20,12 @@ public class EmailTemplateService {
         positionService.requirePosition(positionId);
         return EmailTemplateResponse.from(emailTemplateRepository.findByPositionId(positionId)
                 .orElseThrow(() -> new EmailTemplateNotFoundException(positionId)));
+    }
+
+    /** Шаблон письма должности, если он настроен: генерация пакета не должна падать без письма. */
+    @Transactional(readOnly = true)
+    public Optional<EmailTemplateResponse> find(Long positionId) {
+        return emailTemplateRepository.findByPositionId(positionId).map(EmailTemplateResponse::from);
     }
 
     @Transactional

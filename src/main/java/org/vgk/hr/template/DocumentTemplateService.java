@@ -36,6 +36,12 @@ public class DocumentTemplateService {
         return DocumentTemplateResponse.from(requireTemplate(positionId, templateId));
     }
 
+    /** Активные шаблоны должности вместе с содержимым PDF — для генерации пакета документов. */
+    @Transactional(readOnly = true)
+    public List<PdfTemplate> activeTemplatesWithContent(Long positionId) {
+        return pdfTemplateRepository.findByPositionIdAndDeletedFalseOrderBySortOrderAscIdAsc(positionId);
+    }
+
     @Transactional
     public DocumentTemplateResponse create(Long positionId, MultipartFile file, DocumentTemplateUploadRequest request)
             throws IOException {
